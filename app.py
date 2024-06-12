@@ -538,6 +538,30 @@ def prepare_model_args(request_body):
     
     return model_args
 
+async def send_format_citation_request(request):
+    title_prompt = 'Format text in html table with proper columns. Return ony html. Add css formating to highlight rows. Do not return text outside html tags. Do not include newline characters.'
+    messages =[];
+    messages.append({'role': 'system', 'content': title_prompt})
+    
+    citations = request['citations']
+    
+    content_string = " ".join([item['content'] for item in citations])  
+    messages.append({'role': 'user', 'content': content_string})
+    try:
+        azure_openai_client = init_openai_client(use_data=False)
+        response = await azure_openai_client.chat.completions.create(
+            model=AZURE_OPENAI_MODEL,
+            messages=messages,
+            temperature=1
+        )
+        
+
+    except Exception as e:
+        logging.exception("Exception in send_chat_request")
+        raise e
+
+    return response 
+ 
 async def send_chat_request(request):
     model_args = prepare_model_args(request)
 
@@ -550,6 +574,13 @@ async def send_chat_request(request):
         raise e
 
     return response
+
+async def format_citation_request(request_body):
+    response = await send_format_citation_request(request_body)
+    history_metadata = request_body.get("history_metadata", {})
+
+    return format_non_streaming_response(response, history_metadata)
+
 
 async def complete_chat_request(request_body):
     response = await send_chat_request(request_body)
@@ -586,6 +617,18 @@ async def conversation_internal(request_body):
         else:
             return jsonify({"error": str(ex)}), 500
 
+async def format_internal(request_body):
+    try:
+        result = await format_citation_request(request_body)
+        return jsonify(result)
+    
+    except Exception as ex:
+        logging.exception(ex)
+        if hasattr(ex, "status_code"):
+            return jsonify({"error": str(ex)}), ex.status_code
+        else:
+            return jsonify({"error": str(ex)}), 500
+
 
 @bp.route("/conversation", methods=["POST"])
 async def conversation():
@@ -594,6 +637,14 @@ async def conversation():
     request_json = await request.get_json()
     
     return await conversation_internal(request_json)
+
+@bp.route("/formatcitation", methods=["POST"])
+async def formatcitation():
+    if not request.is_json:
+        return jsonify({"error": "request must be json"}), 415
+    request_json = await request.get_json()
+    
+    return await format_internal(request_json)
 
 @bp.route("/frontend_settings", methods=["GET"])  
 def get_frontend_settings():

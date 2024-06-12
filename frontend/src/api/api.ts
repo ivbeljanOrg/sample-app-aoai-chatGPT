@@ -1,4 +1,4 @@
-import { UserInfo, ConversationRequest, Conversation, ChatMessage, CosmosDBHealth, CosmosDBStatus } from "./models";
+import { UserInfo, ConversationRequest, Conversation, ChatMessage, CosmosDBHealth, CosmosDBStatus, Citation } from "./models";
 import { chatHistorySampleData } from "../constants/chatHistory";
 
 export async function conversationApi(options: ConversationRequest, abortSignal: AbortSignal): Promise<Response> {
@@ -14,6 +14,18 @@ export async function conversationApi(options: ConversationRequest, abortSignal:
     });
 
     return response;
+}
+
+export function formatCitation(citations: Citation[]): Promise<Response> {
+    return fetch("/formatcitation", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            citations: citations
+        })
+    });
 }
 
 export async function getUserInfo(): Promise<UserInfo[]> {

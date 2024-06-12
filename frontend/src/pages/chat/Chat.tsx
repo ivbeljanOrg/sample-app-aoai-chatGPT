@@ -17,6 +17,7 @@ import {
     ChatMessage,
     ConversationRequest,
     conversationApi,
+    formatCitation,
     Citation,
     ToolMessageContent,
     ChatResponse,
@@ -117,7 +118,7 @@ const Chat = () => {
     let toolMessage = {} as ChatMessage
     let assistantContent = ""
 
-    const processResultMessage = (resultMessage: ChatMessage, userMessage: ChatMessage, conversationId?: string) => {
+    const processResultMessage = async (resultMessage: ChatMessage, userMessage: ChatMessage, conversationId?: string) => {
         if (resultMessage.role === ASSISTANT) {
             assistantContent += resultMessage.content
             assistantMessage = resultMessage
@@ -133,7 +134,13 @@ const Chat = () => {
             }
         }
 
-        if (resultMessage.role === TOOL) toolMessage = resultMessage
+        if (resultMessage.role === TOOL) {
+            toolMessage = resultMessage;
+            /*const toolMessageJson = JSON.parse(resultMessage.content) as ToolMessageContent;
+            const response = await formatCitation(toolMessageJson.citations);
+            const formattedResponse = await response.json();
+            resultMessage.citationsHtml = formattedResponse.choices[0].messages[0].content.replace(/\n/g, "") ?? '';*/
+        }
 
         if (!conversationId) {
             isEmpty(toolMessage) ?
@@ -605,10 +612,30 @@ const Chat = () => {
         }
     };
 
+    const liveFormatCitation = async () => {
+        const citations: Citation[] = [];
+        if (activeCitation) {
+            citations.push(activeCitation);
+            const response = await formatCitation(citations);
+            const formattedResponse = await response.json();
+            activeCitation.content = formattedResponse.choices[0].messages[0].content.replace(/\n/g, "") ?? '';
+
+            // Change div content by class name
+            var className = styles.citationPanelContent;
+            const divElement = document.querySelector("."+className);
+            if (divElement) {
+                divElement.innerHTML = activeCitation.content;
+            }
+        }
+    };
+
     const parseCitationFromMessage = (message: ChatMessage) => {
         if (message?.role && message?.role === "tool") {
             try {
                 const toolMessage = JSON.parse(message.content) as ToolMessageContent;
+                toolMessage.citations.forEach((citation) => {
+                    citation.content = message.citationsHtml ?? citation.content;
+                });
                 return toolMessage.citations;
             }
             catch {
@@ -780,6 +807,29 @@ const Chat = () => {
                         <Stack.Item className={styles.citationPanel} tabIndex={0} role="tabpanel" aria-label="Citations Panel">
                             <Stack aria-label="Citations Panel Header Container" horizontal className={styles.citationPanelHeaderContainer} horizontalAlign="space-between" verticalAlign="center">
                                 <span aria-label="Citations" className={styles.citationPanelHeader}>Citations</span>
+                                <CommandBarButton
+                                    role="button"
+                                    styles={{
+                                        icon: {
+                                            color: '#FFFFFF',
+                                        },
+                                        iconDisabled: {
+                                            color: "#BDBDBD !important",
+                                        },
+                                        root: {
+                                            color: '#FFFFFF',
+                                            background: "radial-gradient(109.81% 107.82% at 100.1% 90.19%, #0F6CBD 33.63%, #2D87C3 70.31%, #8DDDD8 100%)",
+                                        },
+                                        rootDisabled: {
+                                            background: "#F0F0F0"
+                                        }
+                                    }}
+                                    className= {styles.clearChatBroom}
+                                    iconProps={{ iconName: 'Broom' }}
+                                    onClick={liveFormatCitation}
+                                    disabled={false}
+                                    aria-label="clear chat button"
+                                />
                                 <IconButton iconProps={{ iconName: 'Cancel' }} aria-label="Close citations panel" onClick={() => setIsCitationPanelOpen(false)} />
                             </Stack>
                             <h5 className={styles.citationPanelTitle} tabIndex={0} title={activeCitation.url && !activeCitation.url.includes("blob.core") ? activeCitation.url : activeCitation.title ?? ""} onClick={() => onViewSource(activeCitation)}>{activeCitation.title}</h5>
@@ -789,8 +839,9 @@ const Chat = () => {
                                     className={styles.citationPanelContent}
                                     children={DOMPurify.sanitize(activeCitation.content, {ALLOWED_TAGS: XSSAllowTags})}
                                     remarkPlugins={[remarkGfm]}
-                                    rehypePlugins={[rehypeRaw]}
+                                    rehypePlugins={[rehypeRaw]} 
                                 />
+                                  
                             </div>
                         </Stack.Item>
                     )}
